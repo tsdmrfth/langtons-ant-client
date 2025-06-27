@@ -266,10 +266,6 @@ export const GridCanvas = () => {
     prevCellSize.current = cellSize
   }, [drawCells, drawAnts, canvasSize, cellSize, historicalCells, gameActions])
 
-  if (!grid.width || !grid.height) {
-    return null
-  }
-
   return (
     <TransformWrapper
       smooth={true}
