@@ -53,7 +53,7 @@ export const GridCanvas = () => {
   const prevCellSize = useRef(cellSize)
 
   const drawGrid = useCallback(() => {
-    const context = gridCanvasRef.current?.getContext('2d', { alpha: false })
+    const context = gridCanvasRef.current?.getContext('2d')
 
     if (!context || !gridCanvasRef.current || canvasSize === 0) {
       return
@@ -89,7 +89,7 @@ export const GridCanvas = () => {
   }, [grid.width, grid.height, cellSize, canvasSize])
 
   const drawCellsOnCanvas = useCallback((canvasRefence: HTMLCanvasElement, cells: Record<string, string>) => {
-    const context = canvasRefence.getContext('2d', { alpha: false })
+    const context = canvasRefence.getContext('2d')
 
     if (!context || canvasSize === 0) {
       return
@@ -129,7 +129,7 @@ export const GridCanvas = () => {
   }, [canvasSize, grid.width, grid.height, cellSize])
 
   const drawCells = useCallback(async () => {
-    const context = cellsCanvasRef.current?.getContext('2d', { alpha: false })
+    const context = cellsCanvasRef.current?.getContext('2d')
 
     if (!context || !cellsCanvasRef.current || canvasSize === 0) {
       return
@@ -154,7 +154,7 @@ export const GridCanvas = () => {
   }, [allCells, newCells, historicalCells, canvasSize, cellSize, drawCellsOnCanvas])
 
   const drawAnts = useCallback(() => {
-    const context = antsCanvasRef.current?.getContext('2d', { alpha: false })
+    const context = antsCanvasRef.current?.getContext('2d')
 
     if (!context || !antsCanvasRef.current || canvasSize === 0) {
       return
@@ -256,12 +256,12 @@ export const GridCanvas = () => {
   }, [])
 
   useEffect(() => {
-    drawGrid()
+    requestAnimationFrame(drawGrid)
   }, [drawGrid])
 
   useEffect(() => {
-    drawCells()
-    drawAnts()
+    requestAnimationFrame(drawCells)
+    requestAnimationFrame(drawAnts)
     prevCanvasSize.current = canvasSize
     prevCellSize.current = cellSize
   }, [drawCells, drawAnts, canvasSize, cellSize, historicalCells, gameActions])
