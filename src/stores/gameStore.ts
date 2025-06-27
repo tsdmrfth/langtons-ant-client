@@ -122,7 +122,6 @@ export const useGameStore = create<GameStore>()(
             },
             sendMessage: (message: OutgoingMessage) => {
                 try {
-                    console.log('sending message', message)
                     webSocketService.sendMessage(message)
                 } catch (error) {
                     throw new Error('Failed to send message to server')

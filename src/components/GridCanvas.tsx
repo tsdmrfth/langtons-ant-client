@@ -51,7 +51,6 @@ export const GridCanvas = () => {
   }, [canvasSize, grid.width, grid.height])
   const prevCanvasSize = useRef(canvasSize)
   const prevCellSize = useRef(cellSize)
-  console.log(Object.keys(allCells).length, 'allCells')
 
   const drawGrid = useCallback(() => {
     const context = gridCanvasRef.current?.getContext('2d', { alpha: false })

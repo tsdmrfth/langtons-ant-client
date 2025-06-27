@@ -35,7 +35,6 @@ export const WebSocketManager: React.FC = () => {
 
       case 'PLAYER_LEFT': {
         const { playerId, cells } = message.payload
-        console.log(message.payload, 'player left')
         gameActions.removePlayer(playerId, cells)
         break
       }
