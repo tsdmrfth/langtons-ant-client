@@ -31,11 +31,15 @@ export const AntControlPanel: React.FC = () => {
       uiActions.setSidebarOpen(false)
     }
 
-    uiActions.setIsPlacingAnt(true)
-    toast({
-      title: 'Place Your Ant',
-      description: 'Click on any cell in the grid to place your ant.',
-    })
+    if (isPlacingAnt) {
+      uiActions.setIsPlacingAnt(false)
+    } else {
+      uiActions.setIsPlacingAnt(true)
+      toast({
+        title: 'Place Your Ant',
+        description: 'Click on any cell in the grid to place your ant.',
+      })
+    }
   }
 
   const handleToggleTileFlip = () => {
