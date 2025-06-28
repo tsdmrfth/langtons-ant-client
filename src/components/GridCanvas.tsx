@@ -218,7 +218,7 @@ export const GridCanvas: React.FC = () => {
       context.arc(x, y, radius, 0, 2 * Math.PI)
       context.fill()
       context.strokeStyle = '#000000'
-      context.lineWidth = 2
+      context.lineWidth = 1
       context.beginPath()
       context.arc(x, y, radius, 0, 2 * Math.PI)
       context.stroke()
@@ -369,7 +369,6 @@ export const GridCanvas: React.FC = () => {
     const draw = () => {
       drawCells()
       drawAnts()
-      console.log('#####', prevCanvasSize.current.width, prevCanvasSize.current.height, 'prevCanvasSize.current', canvasSize.width, canvasSize.height, 'canvasSize')
       prevCanvasSize.current = canvasSize
       prevCellSize.current = cellSize
     }
