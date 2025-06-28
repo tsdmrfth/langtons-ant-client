@@ -2,19 +2,17 @@ import { useToast } from '@/hooks/use-toast'
 import { useGameStore } from '@/stores/gameStore'
 import { useUIStore } from '@/stores/uiStore'
 import { Crosshair, Minus, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReactZoomPanPinchRef, TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const SPACING = 100
 const GRID_LINE_WIDTH = 1
 
-export const GridCanvas = () => {
+export const GridCanvas: React.FC = () => {
   const grid = useGameStore(state => state.grid)
   const newCells = useGameStore(state => state.newCells)
   const allCells = useGameStore(state => state.grid.cells)
   const historicalCells = useGameStore(state => state.historicalCells)
   const ants = useGameStore(state => state.ants)
-  const gameActions = useGameStore(state => state.actions)
   const placeAnt = useGameStore(state => state.actions.placeAnt)
   const flipTile = useGameStore(state => state.actions.flipTile)
   const isPlacingAnt = useUIStore(state => state.isPlacingAnt)
@@ -24,125 +22,155 @@ export const GridCanvas = () => {
   const cellsCanvasRef = useRef<HTMLCanvasElement>(null)
   const antsCanvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const transformWrapperRef = useRef<ReactZoomPanPinchRef>(null)
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
-  const transformScale = useRef(1)
-  const [isPanning, setIsPanning] = useState(false)
+  const [canvasSize, setCanvasSize] = useState({ width: grid.width, height: grid.height })
+  const [transform, setTransform] = useState({
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+  })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [lastTransform, setLastTransform] = useState({
+    scale: 1,
+    translateX: 0,
+    translateY: 0
+  })
   const didRenderHistoricalCells = useRef(false)
-  const { canvasSize, canvasTop, canvasLeft } = useMemo(() => {
-    const { width, height } = containerSize
-
-    if (width === 0 || height === 0) {
-      return { canvasSize: 0, canvasTop: 0, canvasLeft: 0 }
-    }
-
-    const size = Math.min(width, height) - SPACING
-    return {
-      canvasSize: size,
-      canvasTop: (height - size) / 2,
-      canvasLeft: (width - size) / 2
-    }
-  }, [containerSize])
+  const wheelTimeoutRef = useRef<NodeJS.Timeout>()
+  const gridProps = useMemo(() => ({
+    cellSize: 20,
+    minScale: 0.1,
+    maxScale: 10,
+    lineColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  }), [])
   const cellSize = useMemo(() => {
-    if (canvasSize === 0 || grid.width === 0 || grid.height === 0) {
+    if (canvasSize.width === 0 || grid.width === 0 || grid.height === 0) {
       return 0
     }
-    return canvasSize / Math.max(grid.width, grid.height)
-  }, [canvasSize, grid.width, grid.height])
+    const size = Math.min(canvasSize.width, canvasSize.height) - SPACING
+    return size / Math.max(grid.width, grid.height)
+  }, [canvasSize.width, canvasSize.height, grid.width, grid.height])
   const prevCanvasSize = useRef(canvasSize)
   const prevCellSize = useRef(cellSize)
+  const shouldClearCellsCanvas = useRef(false)
+
+  useEffect(() => {
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        setCanvasSize({ width: Math.max(400, width), height: Math.max(300, height) })
+      }
+    })
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => resizeObserver.disconnect()
+  }, [])
 
   const drawGrid = useCallback(() => {
-    const context = gridCanvasRef.current?.getContext('2d')
+    const canvas = gridCanvasRef.current
 
-    if (!context || !gridCanvasRef.current || canvasSize === 0) {
+    if (!canvas || canvasSize.width === 0) {
       return
     }
 
-    const canvas = gridCanvasRef.current
-    canvas.width = canvasSize
-    canvas.height = canvasSize
+    const context = canvas.getContext('2d')
+
+    if (!context) {
+      return
+    }
+
+    canvas.width = canvasSize.width
+    canvas.height = canvasSize.height
+    context.fillStyle = gridProps.backgroundColor
+    context.fillRect(0, 0, canvasSize.width, canvasSize.height)
+
+    context.save()
+    context.translate(canvasSize.width / 2, canvasSize.height / 2)
+    context.scale(transform.scale, transform.scale)
+    context.translate(transform.translateX, transform.translateY)
+
     const gridWidth = grid.width * cellSize
     const gridHeight = grid.height * cellSize
-    const offsetX = (canvasSize - gridWidth) / 2
-    const offsetY = (canvasSize - gridHeight) / 2
-    context.fillStyle = '#FFFFFF'
-    context.fillRect(0, 0, canvasSize, canvasSize)
-    context.strokeStyle = '#CCCCCC'
-    context.lineWidth = GRID_LINE_WIDTH
+    const offsetX = -gridWidth / 2
+    const offsetY = -gridHeight / 2
+
+    context.strokeStyle = gridProps.lineColor
+    context.lineWidth = 1
+    context.beginPath()
 
     for (let i = 0; i <= grid.width; i++) {
       const x = offsetX + i * cellSize
-      context.beginPath()
       context.moveTo(x, offsetY)
-      context.lineTo(x + GRID_LINE_WIDTH, offsetY + gridHeight)
-      context.stroke()
+      context.lineTo(x, offsetY + gridHeight)
     }
 
-    for (let j = 0; j <= grid.height; j++) {
-      const y = offsetY + j * cellSize
-      context.beginPath()
+    for (let i = 0; i <= grid.height; i++) {
+      const y = offsetY + i * cellSize
       context.moveTo(offsetX, y)
-      context.lineTo(offsetX + gridWidth, y + GRID_LINE_WIDTH)
-      context.stroke()
+      context.lineTo(offsetX + gridWidth, y)
     }
-  }, [grid.width, grid.height, cellSize, canvasSize])
 
-  const drawCellsOnCanvas = useCallback((canvasRefence: HTMLCanvasElement, cells: Record<string, string>) => {
-    const context = canvasRefence.getContext('2d')
+    context.stroke()
+    context.restore()
+  }, [canvasSize, transform, grid.width, grid.height, cellSize, gridProps])
 
-    if (!context || canvasSize === 0) {
+  const drawCellsOnCanvas = useCallback((canvasRef: HTMLCanvasElement, cells: Record<string, string>) => {
+    const context = canvasRef.getContext('2d', { alpha: false })
+
+    if (!context || canvasSize.width === 0) {
       return
-    }
-
-    const canvas = canvasRefence
-    const configChanged = canvasSize !== prevCanvasSize.current || cellSize !== prevCellSize.current
-
-    if (configChanged) {
-      canvas.width = canvasSize
-      canvas.height = canvasSize
     }
 
     const gridWidth = grid.width * cellSize
     const gridHeight = grid.height * cellSize
-    const offsetX = (canvasSize - gridWidth) / 2
-    const offsetY = (canvasSize - gridHeight) / 2
+    const offsetX = -gridWidth / 2
+    const offsetY = -gridHeight / 2
+    context.save()
+    context.translate(canvasSize.width / 2, canvasSize.height / 2)
+    context.scale(transform.scale, transform.scale)
+    context.translate(transform.translateX, transform.translateY)
     Object.entries(cells).forEach(([key, color]) => {
       const [x, y] = key.split(',').map(Number)
 
       if (x >= 0 && x < grid.width && y >= 0 && y < grid.height) {
         context.fillStyle = color
-        context.clearRect(
-          offsetX + (x * cellSize),
-          offsetY + (y * cellSize),
-          cellSize,
-          cellSize
-        )
+        context.clearRect(offsetX + (x * cellSize), offsetY + (y * cellSize), cellSize, cellSize)
         context.fillRect(
-          offsetX + GRID_LINE_WIDTH + (x * cellSize),
-          offsetY + GRID_LINE_WIDTH + (y * cellSize),
-          cellSize - 2 * GRID_LINE_WIDTH,
-          cellSize - 2 * GRID_LINE_WIDTH
+          offsetX + (x * cellSize) + GRID_LINE_WIDTH,
+          offsetY + (y * cellSize) + GRID_LINE_WIDTH,
+          cellSize - GRID_LINE_WIDTH * 2,
+          cellSize - GRID_LINE_WIDTH * 2
         )
       }
     })
-  }, [canvasSize, grid.width, grid.height, cellSize])
+
+    context.restore()
+  }, [canvasSize, grid.width, grid.height, cellSize, transform])
 
   const drawCells = useCallback(async () => {
-    const context = cellsCanvasRef.current?.getContext('2d')
+    const context = cellsCanvasRef.current?.getContext('2d', { alpha: false })
 
-    if (!context || !cellsCanvasRef.current || canvasSize === 0) {
+    if (!context || !cellsCanvasRef.current || canvasSize.width === 0) {
       return
     }
 
     const canvas = cellsCanvasRef.current
-    const configChanged = canvasSize !== prevCanvasSize.current || cellSize !== prevCellSize.current
-    let cellsToDraw = configChanged ? allCells : newCells
+    const didSizeChange = canvasSize.width !== prevCanvasSize.current.width
+      || canvasSize.height !== prevCanvasSize.current.height
+      || cellSize !== prevCellSize.current
+    let cellsToDraw = (didSizeChange || shouldClearCellsCanvas.current) ? allCells : newCells
 
-    if (configChanged) {
-      canvas.width = canvasSize
-      canvas.height = canvasSize
+    console.log(didSizeChange, 'didSizeChange', shouldClearCellsCanvas.current, 'shouldClearCellsCanvas.current')
+
+    if (didSizeChange || shouldClearCellsCanvas.current) {
+      canvas.width = canvasSize.width
+      canvas.height = canvasSize.height
       didRenderHistoricalCells.current = false
+      context.clearRect(0, 0, canvas.width, canvas.height)
     }
 
     if (historicalCells && !didRenderHistoricalCells.current) {
@@ -151,34 +179,40 @@ export const GridCanvas = () => {
     }
 
     drawCellsOnCanvas(canvas, cellsToDraw)
-  }, [allCells, newCells, historicalCells, canvasSize, cellSize, drawCellsOnCanvas])
+  }, [allCells, newCells, historicalCells, canvasSize.width, canvasSize.height, cellSize, drawCellsOnCanvas])
 
   const drawAnts = useCallback(() => {
-    const context = antsCanvasRef.current?.getContext('2d')
+    const context = antsCanvasRef.current?.getContext('2d', { alpha: false })
 
-    if (!context || !antsCanvasRef.current || canvasSize === 0) {
+    if (!context || !antsCanvasRef.current || canvasSize.width === 0) {
       return
     }
 
     const canvas = antsCanvasRef.current
 
-    if (canvas.width !== canvasSize) {
-      canvas.width = canvasSize
+    if (canvas.width !== canvasSize.width) {
+      canvas.width = canvasSize.width
     }
 
-    if (canvas.height !== canvasSize) {
-      canvas.height = canvasSize
+    if (canvas.height !== canvasSize.height) {
+      canvas.height = canvasSize.height
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height)
     const gridWidth = grid.width * cellSize
     const gridHeight = grid.height * cellSize
-    const offsetX = (canvasSize - gridWidth) / 2
-    const offsetY = (canvasSize - gridHeight) / 2
+    const offsetX = -gridWidth / 2
+    const offsetY = -gridHeight / 2
+    context.save()
+    context.translate(canvasSize.width / 2, canvasSize.height / 2)
+    context.scale(transform.scale, transform.scale)
+    context.translate(transform.translateX, transform.translateY)
+
     ants.forEach(ant => {
       const x = offsetX + ant.position.x * cellSize + cellSize / 2
       const y = offsetY + ant.position.y * cellSize + cellSize / 2
       const radius = cellSize / 4
+
       context.fillStyle = ant.color
       context.beginPath()
       context.arc(x, y, radius, 0, 2 * Math.PI)
@@ -188,15 +222,15 @@ export const GridCanvas = () => {
       context.beginPath()
       context.arc(x, y, radius, 0, 2 * Math.PI)
       context.stroke()
-      const directionAngle = {
+      const directionAngleMap = {
         UP: -Math.PI / 2,
         RIGHT: 0,
         DOWN: Math.PI / 2,
         LEFT: Math.PI
       }[ant.direction]
       const arrowLength = radius * 0.6
-      const arrowX = x + Math.cos(directionAngle) * arrowLength
-      const arrowY = y + Math.sin(directionAngle) * arrowLength
+      const arrowX = x + Math.cos(directionAngleMap) * arrowLength
+      const arrowY = y + Math.sin(directionAngleMap) * arrowLength
       context.strokeStyle = '#000000'
       context.lineWidth = 2
       context.beginPath()
@@ -204,21 +238,24 @@ export const GridCanvas = () => {
       context.lineTo(arrowX, arrowY)
       context.stroke()
     })
-  }, [grid.width, grid.height, ants, cellSize, canvasSize])
+    context.restore()
+  }, [grid.width, grid.height, ants, cellSize, canvasSize, transform])
 
-  const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if ((!isPlacingAnt && !isFlippingTile) || !gridCanvasRef.current || canvasSize === 0 || isPanning) return
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isPlacingAnt && !isFlippingTile || !gridCanvasRef.current || canvasSize.width === 0) return
 
     const canvas = gridCanvasRef.current
     const rect = canvas.getBoundingClientRect()
-    const clickX = (event.clientX - rect.left) / transformScale.current
-    const clickY = (event.clientY - rect.top) / transformScale.current
+    const clickX = event.clientX - rect.left
+    const clickY = event.clientY - rect.top
     const gridWidth = grid.width * cellSize
     const gridHeight = grid.height * cellSize
-    const offsetX = (canvasSize - gridWidth) / 2
-    const offsetY = (canvasSize - gridHeight) / 2
-    const gridX = Math.floor((clickX - offsetX) / cellSize)
-    const gridY = Math.floor((clickY - offsetY) / cellSize)
+    const offsetX = -gridWidth / 2
+    const offsetY = -gridHeight / 2
+    const worldX = (clickX - canvasSize.width / 2) / transform.scale - transform.translateX
+    const worldY = (clickY - canvasSize.height / 2) / transform.scale - transform.translateY
+    const gridX = Math.floor((worldX - offsetX) / cellSize)
+    const gridY = Math.floor((worldY - offsetY) / cellSize)
 
     if (gridX < 0 || gridX >= grid.width || gridY < 0 || gridY >= grid.height) {
       toast({
@@ -234,119 +271,203 @@ export const GridCanvas = () => {
     } else if (isFlippingTile) {
       flipTile({ x: gridX, y: gridY })
     }
-  }, [isPlacingAnt, isFlippingTile, grid.width, grid.height, placeAnt, flipTile, toast, cellSize, canvasSize, isPanning])
+  }
 
-  useEffect(() => {
-    const resizeObserver = new ResizeObserver(entries => {
-      if (!entries || entries.length === 0) {
-        return
+  const handleZoom = useCallback((delta: number, centerX?: number, centerY?: number) => {
+    setTransform(prev => {
+      const newScale = Math.max(
+        gridProps.minScale,
+        Math.min(gridProps.maxScale, prev.scale * (1 + delta))
+      )
+
+      if (centerX !== undefined && centerY !== undefined) {
+        const worldX = (centerX - canvasSize.width / 2) / prev.scale - prev.translateX
+        const worldY = (centerY - canvasSize.height / 2) / prev.scale - prev.translateY
+        const newTranslateX = (centerX - canvasSize.width / 2) / newScale - worldX
+        const newTranslateY = (centerY - canvasSize.height / 2) / newScale - worldY
+        return {
+          scale: newScale,
+          translateX: newTranslateX,
+          translateY: newTranslateY,
+        }
       }
 
-      const { width, height } = entries[0].contentRect
-      setContainerSize({ width, height })
+      return { ...prev, scale: newScale }
     })
+  }, [gridProps.minScale, gridProps.maxScale, canvasSize])
 
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
+  const handleWheel = useCallback((event: React.WheelEvent) => {
+    event.preventDefault()
+    const rect = containerRef.current?.getBoundingClientRect()
+
+    if (!rect) {
+      return
     }
 
-    return () => {
-      resizeObserver.disconnect()
+    if (wheelTimeoutRef.current) {
+      clearTimeout(wheelTimeoutRef.current)
     }
+
+    shouldClearCellsCanvas.current = true
+    wheelTimeoutRef.current = setTimeout(() => {
+      setLastTransform({
+        scale: transform.scale,
+        translateX: transform.translateX,
+        translateY: transform.translateY
+      })
+      shouldClearCellsCanvas.current = false
+    }, 150)
+    const mouseX = event.clientX - rect.left
+    const mouseY = event.clientY - rect.top
+    const delta = event.deltaY > 0 ? -0.1 : 0.1
+    handleZoom(delta, mouseX, mouseY)
+  }, [handleZoom, transform.scale, transform.translateX, transform.translateY])
+
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    setIsDragging(true)
+    setDragStart({ x: event.clientX, y: event.clientY })
+    setLastTransform({ scale: transform.scale, translateX: transform.translateX, translateY: transform.translateY })
+  }, [transform.scale, transform.translateX, transform.translateY])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return
+
+    shouldClearCellsCanvas.current = true
+    const deltaX = (e.clientX - dragStart.x) / transform.scale
+    const deltaY = (e.clientY - dragStart.y) / transform.scale
+    setTransform(prev => ({
+      ...prev,
+      translateX: lastTransform.translateX + deltaX,
+      translateY: lastTransform.translateY + deltaY,
+    }))
+  }, [isDragging, dragStart, lastTransform, transform.scale])
+
+  const handleMouseUp = useCallback(() => {
+    setTimeout(() => {
+      setIsDragging(false)
+    }, 100)
   }, [])
 
+  const centerView = useCallback(() => {
+    shouldClearCellsCanvas.current = true
+    setTransform({
+      scale: 1,
+      translateX: 0,
+      translateY: 0,
+    })
+  }, [])
+
+  const zoomIn = useCallback(() => handleZoom(0.1), [handleZoom])
+
+  const zoomOut = useCallback(() => handleZoom(-0.1), [handleZoom])
+
   useEffect(() => {
-    requestAnimationFrame(drawGrid)
+    drawGrid()
   }, [drawGrid])
 
   useEffect(() => {
-    requestAnimationFrame(drawCells)
-    requestAnimationFrame(drawAnts)
-    prevCanvasSize.current = canvasSize
-    prevCellSize.current = cellSize
-  }, [drawCells, drawAnts, canvasSize, cellSize, historicalCells, gameActions])
+    const draw = () => {
+      drawCells()
+      drawAnts()
+      console.log('#####', prevCanvasSize.current.width, prevCanvasSize.current.height, 'prevCanvasSize.current', canvasSize.width, canvasSize.height, 'canvasSize')
+      prevCanvasSize.current = canvasSize
+      prevCellSize.current = cellSize
+    }
+
+    requestAnimationFrame(draw)
+  }, [drawCells, drawAnts, canvasSize, cellSize])
+
+  useEffect(() => {
+    return () => {
+      if (wheelTimeoutRef.current) {
+        clearTimeout(wheelTimeoutRef.current)
+      }
+    }
+  }, [])
 
   return (
-    <TransformWrapper
-      smooth={true}
-      maxScale={10}
-      minScale={0.5}
-      initialScale={1}
-      initialPositionX={0}
-      initialPositionY={0}
-      ref={transformWrapperRef}
-      onPanningStart={(_, event) => {
-        if (event.detail > 0) {
-          return
-        }
-        setIsPanning(true)
-      }}
-      onPanningStop={() => setTimeout(() => setIsPanning(false), 500)}
-      onTransformed={(_, state) => transformScale.current = state.scale}>
-      <TransformComponent
-        wrapperClass='w-full h-full' contentClass='w-full h-full p-6 md:p-8 relative'>
-        <div
-          ref={containerRef}
-          style={{ width: '100%', height: '100%' }}
-          className="flex-1 w-full h-full flex items-center justify-center overflow-hidden relative">
-          <canvas
-            className="z-10"
-            ref={gridCanvasRef}
-            style={{
-              position: 'absolute',
-              top: canvasTop,
-              left: canvasLeft,
-              width: canvasSize,
-              height: canvasSize
-            }} />
-          <canvas
-            className="z-20"
-            ref={cellsCanvasRef}
-            style={{
-              position: 'absolute',
-              top: canvasTop,
-              left: canvasLeft,
-              width: canvasSize,
-              height: canvasSize
-            }} />
-          <canvas
-            className="z-30"
-            ref={antsCanvasRef}
-            onClick={handleCanvasClick}
-            style={{
-              position: 'absolute',
-              top: canvasTop,
-              left: canvasLeft,
-              width: canvasSize,
-              height: canvasSize
-            }} />
-        </div>
-      </TransformComponent>
-      <ZoomControls />
-    </TransformWrapper>
+    <div
+      ref={containerRef}
+      onWheel={handleWheel}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onMouseMove={handleMouseMove}
+      onMouseDown={handleMouseDown}
+      className="relative w-full h-full min-h-[400px] bg-gray-50 overflow-hidden">
+
+      <canvas
+        ref={gridCanvasRef}
+        className="absolute z-10 cursor-grab active:cursor-grabbing"
+        style={{
+          width: canvasSize.width,
+          height: canvasSize.height,
+          display: 'block',
+          margin: '0 auto'
+        }} />
+
+      <canvas
+        ref={cellsCanvasRef}
+        className="absolute z-20 pointer-events-none"
+        style={{
+          width: canvasSize.width,
+          height: canvasSize.height,
+          margin: '0 auto'
+        }} />
+
+      <canvas
+        ref={antsCanvasRef}
+        className="absolute z-30 cursor-pointer"
+        onClick={handleCanvasClick}
+        style={{
+          width: canvasSize.width,
+          height: canvasSize.height,
+          margin: '0 auto'
+        }} />
+
+      <ZoomControls
+        zoomIn={zoomIn}
+        zoomOut={zoomOut}
+        centerView={centerView}
+        transform={transform} />
+    </div>
   )
 }
 
-const ZoomControls = () => {
-  const { zoomIn, zoomOut, centerView } = useControls()
+type ZoomControlProps = {
+  zoomIn: () => void
+  zoomOut: () => void
+  centerView: () => void
+  transform: {
+    scale: number
+    translateX: number
+    translateY: number
+  }
+}
 
+const ZoomControls: React.FC<ZoomControlProps> = ({ zoomIn, zoomOut, centerView, transform }) => {
   return (
-    <div className="absolute top-6 right-6 z-50 flex flex-col gap-2 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg p-2">
-      <button
-        onClick={() => zoomIn()}
-        className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
-        <Plus size={20} />
-      </button>
-      <button
-        onClick={() => zoomOut()}
-        className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
-        <Minus size={20} />
-      </button>
-      <button
-        onClick={() => centerView()}
-        className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
-        <Crosshair size={20} />
-      </button>
-    </div>
+    <>
+      <div className="absolute top-6 right-6 z-50 flex flex-col gap-2 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg p-2">
+        <button
+          onClick={zoomIn}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
+          <Plus size={20} />
+        </button>
+        <button
+          onClick={zoomOut}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
+          <Minus size={20} />
+        </button>
+        <button
+          onClick={centerView}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
+          <Crosshair size={20} />
+        </button>
+      </div>
+
+      <div className="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg px-3 py-1 text-sm text-gray-600 z-40">
+        {Math.round(transform.scale * 100)}%
+      </div>
+    </>
   )
 }
