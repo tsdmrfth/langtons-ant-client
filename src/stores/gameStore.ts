@@ -19,6 +19,7 @@ interface GameStore {
     players: Record<string, Player>
     currentPlayer: Player | null
     selectedRules: Rule[]
+    tickInterval: number
     actions: {
         setInitialState: (state: { grid: Grid, ants: Ant[], players: Record<string, Player> }) => void
         setCurrentPlayer: (player: Player) => void
@@ -34,6 +35,7 @@ interface GameStore {
         mergeGridCells: (cells: Record<string, string>) => void
         handleRuleChangeResponse: (playerId: string, rules: Rule[]) => void,
         insertNewCells: (cells: Record<string, string>) => void
+        updateGameConfig: (config: { gridSize: number, tickInterval: number }) => void
     }
 }
 
@@ -49,6 +51,7 @@ export const useGameStore = create<GameStore>()(
         players: {},
         currentPlayer: null,
         selectedRules: [],
+        tickInterval: 250,
         actions: {
             setInitialState: (state: { grid: Grid, ants: Ant[], players: Record<string, Player> }) => {
                 set({
@@ -83,7 +86,10 @@ export const useGameStore = create<GameStore>()(
                 set((state) => ({
                     grid: {
                         ...state.grid,
-                        cells: { ...state.grid.cells, ...(state.newCells || {}) }
+                        cells: { 
+                            ...state.grid.cells, 
+                            ...snapshot.cells
+                        }
                     },
                     ants: snapshot.ants || state.ants,
                     newCells: snapshot.cells || {}
@@ -245,7 +251,19 @@ export const useGameStore = create<GameStore>()(
                     newCells: cells,
                     grid: {
                         ...state.grid,
-                        cells: { ...state.grid.cells, ...state.newCells }
+                        cells: { 
+                            ...state.grid.cells,
+                            ...cells
+                         }
+                    }
+                }))
+            },
+            updateGameConfig: (config: { gridSize: number, tickInterval: number }) => {
+                set((state) => ({
+                    grid: {
+                        ...state.grid,
+                        width: config.gridSize,
+                        height: config.gridSize
                     }
                 }))
             }

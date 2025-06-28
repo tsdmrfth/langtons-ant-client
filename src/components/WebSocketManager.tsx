@@ -78,9 +78,9 @@ export const WebSocketManager: React.FC = () => {
 
       case 'GAME_CONFIG_UPDATED': {
         const { gridSize, tickInterval } = message.payload
-        gameActions.setInitialState({
-          grid: { width: gridSize, height: gridSize, cells: {} },
-          ants: []
+        gameActions.updateGameConfig({
+          gridSize,
+          tickInterval
         })
         uiActions.setGameControlUpdateLoading(false)
         toast({
