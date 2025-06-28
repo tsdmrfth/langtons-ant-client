@@ -10,8 +10,9 @@ export const GameControls: React.FC = () => {
     const gameControlUpdateLoading = useUIStore(state => state.gameControlUpdateLoading)
     const grid = useGameStore(state => state.grid)
     const ants = useGameStore(state => state.ants)
+    const tickInterval = useGameStore(state => state.tickInterval)
     const [gridSize, setGridSize] = useState(grid.width)
-    const [tickInterval, setTickInterval] = useState(250)
+    const [tickIntervalState, setTickIntervalState] = useState(tickInterval)
     const hasAnts = ants.length > 0
 
     useEffect(() => {
@@ -25,7 +26,7 @@ export const GameControls: React.FC = () => {
             type: 'UPDATE_GAME_CONFIG',
             payload: {
                 gridSize,
-                tickInterval
+                tickInterval: tickIntervalState
             }
         })
     }
@@ -50,8 +51,8 @@ export const GameControls: React.FC = () => {
                         <input
                             type="number"
                             min={10}
-                            value={tickInterval}
-                            onChange={e => setTickInterval(Number(e.target.value))}
+                            value={tickIntervalState}
+                            onChange={event => setTickIntervalState(Number(event.target.value))}
                             className="rounded px-2 py-1 bg-gray-900 text-gray-100 border border-gray-700"
                         />
                     </div>
