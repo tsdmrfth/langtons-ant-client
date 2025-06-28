@@ -119,7 +119,7 @@ export const GridCanvas: React.FC = () => {
   }, [canvasSize, transform, grid.width, grid.height, cellSize, gridProps])
 
   const drawCellsOnCanvas = useCallback((canvasRef: HTMLCanvasElement, cells: Record<string, string>) => {
-    const context = canvasRef.getContext('2d', { alpha: false })
+    const context = canvasRef.getContext('2d')
 
     if (!context || canvasSize.width === 0) {
       return
@@ -152,7 +152,7 @@ export const GridCanvas: React.FC = () => {
   }, [canvasSize, grid.width, grid.height, cellSize, transform])
 
   const drawCells = useCallback(async () => {
-    const context = cellsCanvasRef.current?.getContext('2d', { alpha: false })
+    const context = cellsCanvasRef.current?.getContext('2d')
 
     if (!context || !cellsCanvasRef.current || canvasSize.width === 0) {
       return
@@ -182,7 +182,7 @@ export const GridCanvas: React.FC = () => {
   }, [allCells, newCells, historicalCells, canvasSize.width, canvasSize.height, cellSize, drawCellsOnCanvas])
 
   const drawAnts = useCallback(() => {
-    const context = antsCanvasRef.current?.getContext('2d', { alpha: false })
+    const context = antsCanvasRef.current?.getContext('2d')
 
     if (!context || !antsCanvasRef.current || canvasSize.width === 0) {
       return
