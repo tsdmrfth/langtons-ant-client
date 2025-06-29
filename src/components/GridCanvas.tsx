@@ -1,4 +1,5 @@
 import { useToast } from '@/hooks/use-toast'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useGameStore } from '@/stores/gameStore'
 import { useUIStore } from '@/stores/uiStore'
 import { Crosshair, Minus, Plus } from 'lucide-react'
@@ -8,6 +9,7 @@ const SPACING = 100
 const GRID_LINE_WIDTH = 1
 
 export const GridCanvas: React.FC = () => {
+  const isMobile = useIsMobile()
   const grid = useGameStore(state => state.grid)
   const newCells = useGameStore(state => state.newCells)
   const allCells = useGameStore(state => state.grid.cells)
@@ -35,15 +37,20 @@ export const GridCanvas: React.FC = () => {
     translateX: 0,
     translateY: 0
   })
+  const [touchStartDistance, setTouchStartDistance] = useState(0)
+  const [touchStartScale, setTouchStartScale] = useState(1)
+  const [touchStartPosition, setTouchStartPosition] = useState({ x: 0, y: 0 })
+  const [hasMoved, setHasMoved] = useState(false)
   const didRenderHistoricalCells = useRef(false)
   const wheelTimeoutRef = useRef<NodeJS.Timeout>()
+  const touchTimeoutRef = useRef<NodeJS.Timeout>()
   const gridProps = useMemo(() => ({
     cellSize: 20,
     minScale: 0.1,
-    maxScale: 10,
+    maxScale: grid.width / 10,
     lineColor: '#e5e7eb',
     backgroundColor: '#ffffff',
-  }), [])
+  }), [grid.width])
   const cellSize = useMemo(() => {
     if (canvasSize.width === 0 || grid.width === 0 || grid.height === 0) {
       return 0
@@ -164,8 +171,6 @@ export const GridCanvas: React.FC = () => {
       || cellSize !== prevCellSize.current
     let cellsToDraw = (didSizeChange || shouldClearCellsCanvas.current) ? allCells : newCells
 
-    console.log(didSizeChange, 'didSizeChange', shouldClearCellsCanvas.current, 'shouldClearCellsCanvas.current')
-
     if (didSizeChange || shouldClearCellsCanvas.current) {
       canvas.width = canvasSize.width
       canvas.height = canvasSize.height
@@ -273,7 +278,41 @@ export const GridCanvas: React.FC = () => {
     }
   }
 
+  const handleTouchClick = useCallback((event: TouchEvent) => {
+    if (!isMobile || !isPlacingAnt && !isFlippingTile || !gridCanvasRef.current || canvasSize.width === 0) return
+
+    const touch = event.touches[0]
+    const canvas = gridCanvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const clickX = touch.clientX - rect.left
+    const clickY = touch.clientY - rect.top
+    const gridWidth = grid.width * cellSize
+    const gridHeight = grid.height * cellSize
+    const offsetX = -gridWidth / 2
+    const offsetY = -gridHeight / 2
+    const worldX = (clickX - canvasSize.width / 2) / transform.scale - transform.translateX
+    const worldY = (clickY - canvasSize.height / 2) / transform.scale - transform.translateY
+    const gridX = Math.floor((worldX - offsetX) / cellSize)
+    const gridY = Math.floor((worldY - offsetY) / cellSize)
+
+    if (gridX < 0 || gridX >= grid.width || gridY < 0 || gridY >= grid.height) {
+      toast({
+        title: 'Invalid Position',
+        description: 'Touch position is outside the grid boundaries',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (isPlacingAnt) {
+      placeAnt({ x: gridX, y: gridY })
+    } else if (isFlippingTile) {
+      flipTile({ x: gridX, y: gridY })
+    }
+  }, [isMobile, isPlacingAnt, isFlippingTile, grid.width, grid.height, cellSize, canvasSize, transform, placeAnt, flipTile, toast])
+
   const handleZoom = useCallback((delta: number, centerX?: number, centerY?: number) => {
+    shouldClearCellsCanvas.current = true
     setTransform(prev => {
       const newScale = Math.max(
         gridProps.minScale,
@@ -297,6 +336,8 @@ export const GridCanvas: React.FC = () => {
   }, [gridProps.minScale, gridProps.maxScale, canvasSize])
 
   const handleWheel = useCallback((event: React.WheelEvent) => {
+    if (isMobile) return
+
     event.preventDefault()
     const rect = containerRef.current?.getBoundingClientRect()
 
@@ -321,16 +362,153 @@ export const GridCanvas: React.FC = () => {
     const mouseY = event.clientY - rect.top
     const delta = event.deltaY > 0 ? -0.1 : 0.1
     handleZoom(delta, mouseX, mouseY)
-  }, [handleZoom, transform.scale, transform.translateX, transform.translateY])
+  }, [handleZoom, transform.scale, transform.translateX, transform.translateY, isMobile])
+
+  const getTouchDistance = useCallback((touches: TouchList) => {
+    if (touches.length < 2) {
+      return 0
+    }
+
+    const dx = touches[0].clientX - touches[1].clientX
+    const dy = touches[0].clientY - touches[1].clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }, [])
+
+  const getTouchCenter = useCallback((touches: TouchList) => {
+    if (touches.length === 0) {
+      return { x: 0, y: 0 }
+    }
+
+    if (touches.length === 1) {
+      const rect = containerRef.current?.getBoundingClientRect()
+
+      if (!rect) {
+        return { x: 0, y: 0 }
+      }
+
+      return {
+        x: touches[0].clientX - rect.left,
+        y: touches[0].clientY - rect.top
+      }
+    }
+
+    const x = (touches[0].clientX + touches[1].clientX) / 2
+    const y = (touches[0].clientY + touches[1].clientY) / 2
+    const rect = containerRef.current?.getBoundingClientRect()
+    
+    if (!rect) {
+      return { x: 0, y: 0 }
+    }
+
+    return {
+      x: x - rect.left,
+      y: y - rect.top
+    }
+  }, [])
+
+  const handleTouchStart = useCallback((event: TouchEvent) => {
+    if (!isMobile) return
+
+    if (event.touches.length === 2) {
+      event.preventDefault()
+      const distance = getTouchDistance(event.touches)
+      setTouchStartDistance(distance)
+      setTouchStartScale(transform.scale)
+      setHasMoved(false)
+    } else if (event.touches.length === 1) {
+      const touch = event.touches[0]
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      setTouchStartPosition({ x: touch.clientX, y: touch.clientY })
+      setHasMoved(false)
+      setLastTransform({ scale: transform.scale, translateX: transform.translateX, translateY: transform.translateY })
+    }
+  }, [isMobile, getTouchDistance, transform.scale, transform.translateX, transform.translateY])
+
+  const handleTouchMove = useCallback((event: TouchEvent) => {
+    if (!isMobile) return
+
+    if (event.touches.length === 2) {
+      event.preventDefault()
+      const distance = getTouchDistance(event.touches)
+      const center = getTouchCenter(event.touches)
+
+      if (touchStartDistance > 0) {
+        setHasMoved(true)
+        const scaleDelta = (distance - touchStartDistance) / touchStartDistance
+        const newScale = Math.max(
+          gridProps.minScale,
+          Math.min(gridProps.maxScale, touchStartScale * (1 + scaleDelta * 0.5))
+        )
+
+        shouldClearCellsCanvas.current = true
+        setTransform(prev => {
+          const worldX = (center.x - canvasSize.width / 2) / prev.scale - prev.translateX
+          const worldY = (center.y - canvasSize.height / 2) / prev.scale - prev.translateY
+          const newTranslateX = (center.x - canvasSize.width / 2) / newScale - worldX
+          const newTranslateY = (center.y - canvasSize.height / 2) / newScale - worldY
+
+          return {
+            scale: newScale,
+            translateX: newTranslateX,
+            translateY: newTranslateY,
+          }
+        })
+      }
+    } else if (event.touches.length === 1) {
+      const touch = event.touches[0]
+      const deltaX = Math.abs(touch.clientX - touchStartPosition.x)
+      const deltaY = Math.abs(touch.clientY - touchStartPosition.y)
+      const moveThreshold = 10
+
+      if (deltaX > moveThreshold || deltaY > moveThreshold) {
+        event.preventDefault()
+        setHasMoved(true)
+        setIsDragging(true)
+        shouldClearCellsCanvas.current = true
+        const deltaX = (touch.clientX - touchStartPosition.x) / transform.scale
+        const deltaY = (touch.clientY - touchStartPosition.y) / transform.scale
+        setTransform(prev => ({
+          ...prev,
+          translateX: lastTransform.translateX + deltaX,
+          translateY: lastTransform.translateY + deltaY,
+        }))
+      }
+    }
+  }, [isMobile, getTouchDistance, getTouchCenter, touchStartDistance, touchStartScale, gridProps.minScale, gridProps.maxScale, canvasSize, touchStartPosition, transform.scale, lastTransform])
+
+  const handleTouchEnd = useCallback((event: TouchEvent) => {
+    if (!isMobile) return
+
+    if (touchTimeoutRef.current) {
+      clearTimeout(touchTimeoutRef.current)
+    }
+
+    if (!hasMoved && event.touches.length === 0) {
+      handleTouchClick(event)
+    }
+
+    touchTimeoutRef.current = setTimeout(() => {
+      setIsDragging(false)
+      setTouchStartDistance(0)
+      setTouchStartScale(1)
+      setTouchStartPosition({ x: 0, y: 0 })
+      setHasMoved(false)
+      shouldClearCellsCanvas.current = false
+    }, 100)
+  }, [isMobile, hasMoved, handleTouchClick])
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (isMobile) return
+
     setIsDragging(true)
     setDragStart({ x: event.clientX, y: event.clientY })
     setLastTransform({ scale: transform.scale, translateX: transform.translateX, translateY: transform.translateY })
-  }, [transform.scale, transform.translateX, transform.translateY])
+  }, [transform.scale, transform.translateX, transform.translateY, isMobile])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return
+    if (!isDragging || isMobile) return
 
     shouldClearCellsCanvas.current = true
     const deltaX = (e.clientX - dragStart.x) / transform.scale
@@ -340,13 +518,15 @@ export const GridCanvas: React.FC = () => {
       translateX: lastTransform.translateX + deltaX,
       translateY: lastTransform.translateY + deltaY,
     }))
-  }, [isDragging, dragStart, lastTransform, transform.scale])
+  }, [isDragging, dragStart, lastTransform, transform.scale, isMobile])
 
   const handleMouseUp = useCallback(() => {
+    if (isMobile) return
+
     setTimeout(() => {
       setIsDragging(false)
     }, 100)
-  }, [])
+  }, [isMobile])
 
   const centerView = useCallback(() => {
     shouldClearCellsCanvas.current = true
@@ -381,8 +561,28 @@ export const GridCanvas: React.FC = () => {
       if (wheelTimeoutRef.current) {
         clearTimeout(wheelTimeoutRef.current)
       }
+      if (touchTimeoutRef.current) {
+        clearTimeout(touchTimeoutRef.current)
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (!isMobile) return
+
+    const container = containerRef.current
+    if (!container) return
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false })
+    container.addEventListener('touchmove', handleTouchMove, { passive: false })
+    container.addEventListener('touchend', handleTouchEnd, { passive: false })
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+    }
+  }, [isMobile, handleTouchStart, handleTouchMove, handleTouchEnd])
 
   return (
     <div
@@ -446,7 +646,7 @@ type ZoomControlProps = {
 const ZoomControls: React.FC<ZoomControlProps> = ({ zoomIn, zoomOut, centerView, transform }) => {
   return (
     <>
-      <div className="absolute top-6 right-6 z-50 flex flex-col gap-2 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg p-2">
+      <div className="absolute top-6 right-6 z-40 flex flex-col gap-2 bg-gray-800 bg-opacity-90 rounded-lg shadow-lg p-2">
         <button
           onClick={zoomIn}
           className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-600 hover:bg-yellow-600 text-white transition-colors focus:outline-none">
