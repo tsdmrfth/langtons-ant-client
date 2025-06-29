@@ -31,7 +31,7 @@ A real-time, multiplayer implementation of Langton's Ant cellular automaton buil
 
 - Node.js (version 18 or higher)
 - npm package manager
-- A running Langton's Ant server (WebSocket endpoint)
+- A running [Langton's Ant server](https://github.com/tsdmrfth/langtons-ant-server) (WebSocket endpoint)
 
 ## 🚀 Installation
 
