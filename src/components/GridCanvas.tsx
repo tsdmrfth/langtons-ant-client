@@ -1,5 +1,5 @@
-import { useToast } from '@/hooks/use-toast'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useToast } from '@/hooks/use-toast'
 import { useGameStore } from '@/stores/gameStore'
 import { useUIStore } from '@/stores/uiStore'
 import { Crosshair, Minus, Plus } from 'lucide-react'
@@ -44,20 +44,25 @@ export const GridCanvas: React.FC = () => {
   const didRenderHistoricalCells = useRef(false)
   const wheelTimeoutRef = useRef<NodeJS.Timeout>()
   const touchTimeoutRef = useRef<NodeJS.Timeout>()
-  const gridProps = useMemo(() => ({
-    cellSize: 20,
-    minScale: 0.1,
-    maxScale: grid.width / 10,
-    lineColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-  }), [grid.width])
   const cellSize = useMemo(() => {
     if (canvasSize.width === 0 || grid.width === 0 || grid.height === 0) {
       return 0
     }
     const size = Math.min(canvasSize.width, canvasSize.height) - SPACING
-    return size / Math.max(grid.width, grid.height)
+    return Math.max(5, size / Math.max(grid.width, grid.height))
   }, [canvasSize.width, canvasSize.height, grid.width, grid.height])
+  const gridProps = useMemo(() => {
+    const minScale = Math.min(
+      (canvasSize.width * 0.5) / (grid.width * cellSize),
+      (canvasSize.height * 0.5) / (grid.height * cellSize)
+    )
+    return {
+      minScale,
+      maxScale: grid.width / 10,
+      lineColor: '#e5e7eb',
+      backgroundColor: '#ffffff',
+    }
+  }, [canvasSize.width, canvasSize.height, grid.width, grid.height, cellSize])
   const prevCanvasSize = useRef(canvasSize)
   const prevCellSize = useRef(cellSize)
   const shouldClearCellsCanvas = useRef(false)
@@ -94,17 +99,14 @@ export const GridCanvas: React.FC = () => {
     canvas.height = canvasSize.height
     context.fillStyle = gridProps.backgroundColor
     context.fillRect(0, 0, canvasSize.width, canvasSize.height)
-
     context.save()
     context.translate(canvasSize.width / 2, canvasSize.height / 2)
     context.scale(transform.scale, transform.scale)
     context.translate(transform.translateX, transform.translateY)
-
     const gridWidth = grid.width * cellSize
     const gridHeight = grid.height * cellSize
     const offsetX = -gridWidth / 2
     const offsetY = -gridHeight / 2
-
     context.strokeStyle = gridProps.lineColor
     context.lineWidth = 1
     context.beginPath()
@@ -395,7 +397,7 @@ export const GridCanvas: React.FC = () => {
     const x = (touches[0].clientX + touches[1].clientX) / 2
     const y = (touches[0].clientY + touches[1].clientY) / 2
     const rect = containerRef.current?.getBoundingClientRect()
-    
+
     if (!rect) {
       return { x: 0, y: 0 }
     }
