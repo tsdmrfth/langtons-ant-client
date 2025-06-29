@@ -66,7 +66,7 @@ export const GameControls: React.FC = () => {
                             </button>
                         </TooltipTrigger>
                         {hasAnts && (
-                            <TooltipContent>
+                            <TooltipContent side="top" align="center" className="max-w-[220px] break-words whitespace-normal">
                                 <p>Cannot update game config while ants are active</p>
                             </TooltipContent>
                         )}
