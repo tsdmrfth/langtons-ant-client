@@ -14,7 +14,7 @@ export const Header: React.FC = () => {
           className="p-2 text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition-colors">
           {sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
         </button>
-        <h1 className="text-xl font-bold text-white">
+        <h1 className="text-xl font-bold text-white sm:text-lg">
           Multiplayer Langton's Ant
         </h1>
       </div>

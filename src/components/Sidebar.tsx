@@ -14,7 +14,7 @@ export const Sidebar: React.FC = () => {
       {
         sidebarOpen && (
           <div
-            className="fixed top-16 bottom-0 left-0 right-0 bg-black bg-opacity-50 z-40 md:hidden"
+            className="fixed top-16 bottom-0 left-0 right-0 bg-black bg-opacity-50 z-50 md:hidden"
             onClick={() => uiActions.setSidebarOpen(false)} />
         )
       }
@@ -27,6 +27,7 @@ export const Sidebar: React.FC = () => {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         ${sidebarOpen ? 'md:w-80' : 'md:w-0'}
         flex flex-col
+        z-50
       `}>
         <div
           className={`
