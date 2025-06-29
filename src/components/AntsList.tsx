@@ -2,11 +2,13 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CollapsiblePanel } from '@/components/ui/collapsible-panel'
 import { useGameStore } from '@/stores/gameStore'
-import { Settings } from 'lucide-react'
+import { useUIStore } from '@/stores/uiStore'
+import { Info, Settings } from 'lucide-react'
 import React from 'react'
 
 export const AntsList: React.FC = () => {
   const { currentPlayer, ants } = useGameStore()
+  const { focusedAntId, actions: uiActions } = useUIStore()
   const sortedAnts = [...ants].sort((a, b) => {
     const aIsCurrentUser = a.id === currentPlayer?.antId
     const bIsCurrentUser = b.id === currentPlayer?.antId
@@ -16,23 +18,46 @@ export const AntsList: React.FC = () => {
     return 0
   })
 
+  const handleAntClick = (antId: string) => {
+    if (focusedAntId === antId) {
+      uiActions.setFocusedAntId(null)
+    } else {
+      uiActions.setFocusedAntId(antId)
+    }
+  }
+
   return (
     <CollapsiblePanel title={`Ants (${ants.length})`}>
       <div className="space-y-2">
         {
+          ants.length > 0 && (
+            <div className="mb-4 p-3 bg-blue-900 bg-opacity-20 border border-blue-500 rounded">
+              <div className="flex items-center gap-2">
+                <Info className="h-8 w-8 text-blue-400" />
+                <span className="text-sm text-blue-300">
+                  Click on any ant in the list below to zoom to its position on the grid
+                </span>
+              </div>
+            </div>
+          )
+        }
+
+        {
           sortedAnts.map((ant, index) => {
             const isCurrentUser = ant.id === currentPlayer?.antId
+            const isFocused = ant.id === focusedAntId
             const playerNumber = index + 1
 
             return (
               ant && ant.id && (
                 <div
                   key={ant.id}
-                  className={`flex items-center gap-3 p-2 rounded ${isCurrentUser ? 'border' : 'bg-gray-750'}`}
+                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-all ${isCurrentUser ? 'border' : 'bg-gray-750'} ${isFocused ? 'ring-2 ring-blue-400' : ''}`}
                   style={isCurrentUser ? {
                     backgroundColor: `${currentPlayer.color}20`,
                     borderColor: currentPlayer.color
-                  } : {}}>
+                  } : {}}
+                  onClick={() => handleAntClick(ant.id)}>
 
                   <div
                     className="flex-1 flex items-center gap-3">

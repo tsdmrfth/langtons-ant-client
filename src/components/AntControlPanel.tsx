@@ -2,12 +2,12 @@ import { useToast } from '@/hooks/use-toast'
 import { useGameStore } from '@/stores/gameStore'
 import { useUIStore } from '@/stores/uiStore'
 import { contrastColor } from '@/utils/color'
-import { Palette, Plus } from 'lucide-react'
+import { Palette, Plus, Info } from 'lucide-react'
 import React from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
 
 export const AntControlPanel: React.FC = () => {
-  const { currentPlayer } = useGameStore()
+  const { currentPlayer, ants } = useGameStore()
   const { isPlacingAnt, isFlippingTile, actions: uiActions } = useUIStore()
   const { toast } = useToast()
 

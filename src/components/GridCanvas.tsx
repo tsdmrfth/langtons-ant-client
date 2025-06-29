@@ -19,6 +19,8 @@ export const GridCanvas: React.FC = () => {
   const flipTile = useGameStore(state => state.actions.flipTile)
   const isPlacingAnt = useUIStore(state => state.isPlacingAnt)
   const isFlippingTile = useUIStore(state => state.isFlippingTile)
+  const focusedAntId = useUIStore(state => state.focusedAntId)
+  const setFocusedAntId = useUIStore(state => state.actions.setFocusedAntId)
   const { toast } = useToast()
   const gridCanvasRef = useRef<HTMLCanvasElement>(null)
   const cellsCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -81,6 +83,35 @@ export const GridCanvas: React.FC = () => {
 
     return () => resizeObserver.disconnect()
   }, [])
+
+  const zoomToAnt = useCallback((antId: string) => {
+    const ant = ants.find(ant => ant.id === antId)
+
+    if (!ant || canvasSize.width === 0) {
+      return
+    }
+
+    const gridWidth = grid.width * cellSize
+    const gridHeight = grid.height * cellSize
+    const antWorldX = (ant.position.x * cellSize) - gridWidth / 2
+    const antWorldY = (ant.position.y * cellSize) - gridHeight / 2
+    const targetScale = Math.min(gridProps.maxScale, Math.max(gridProps.minScale, 3))
+    const targetTranslateX = -antWorldX
+    const targetTranslateY = -antWorldY
+    shouldClearCellsCanvas.current = true
+    setTransform({
+      scale: targetScale,
+      translateX: targetTranslateX,
+      translateY: targetTranslateY,
+    })
+  }, [ants, grid.width, grid.height, cellSize, canvasSize.width, gridProps.maxScale, gridProps.minScale])
+
+  useEffect(() => {
+    if (focusedAntId) {
+      zoomToAnt(focusedAntId)
+      setFocusedAntId(null)
+    }
+  }, [focusedAntId, zoomToAnt, setFocusedAntId])
 
   const drawGrid = useCallback(() => {
     const canvas = gridCanvasRef.current

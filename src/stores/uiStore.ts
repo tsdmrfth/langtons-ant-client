@@ -8,12 +8,14 @@ interface UIStore {
     isPlacingAnt: boolean
     isFlippingTile: boolean
     gameControlUpdateLoading: boolean
+    focusedAntId: string | null
     actions: {
         setConnectionState: (connected: boolean, error?: string) => void
         setSidebarOpen: (open: boolean) => void
         setIsPlacingAnt: (isPlacing: boolean) => void
         setIsFlippingTile: (isFlipping: boolean) => void
         setGameControlUpdateLoading: (loading: boolean) => void
+        setFocusedAntId: (antId: string | null) => void
     }
 }
 
@@ -25,6 +27,7 @@ export const useUIStore = create<UIStore>()(
         isPlacingAnt: false,
         isFlippingTile: false,
         gameControlUpdateLoading: false,
+        focusedAntId: null,
         actions: {
             setConnectionState: (connected: boolean, error?: string) => {
                 set({ isConnected: connected, connectionError: error || null })
@@ -40,6 +43,9 @@ export const useUIStore = create<UIStore>()(
             },
             setGameControlUpdateLoading: (loading: boolean) => {
                 set({ gameControlUpdateLoading: loading })
+            },
+            setFocusedAntId: (antId: string | null) => {
+                set({ focusedAntId: antId })
             }
         }
     }))
