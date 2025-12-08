@@ -1,3 +1,5 @@
+<img src="public/icon.png" align="right" width="128" height="128" />
+
 # Langton's Ant Client
 
 A real-time, multiplayer implementation of Langton's Ant cellular automaton built with React, TypeScript, and WebSocket technology. This client provides an interactive web interface for exploring the fascinating patterns created by Langton's Ant in a collaborative environment.
