@@ -69,7 +69,7 @@ This project is automatically deployed to Netlify on every push to the `main-v2`
 - **Publish Directory**: `dist`
 - **Environment**: Production
 
-The live application is available at the Netlify URL provided in the deployment settings.
+The live application is available at [https://tsdmrfth-langtons-ant.netlify.app](https://tsdmrfth-langtons-ant.netlify.app).
 
 ## 🎮 Usage
 
