@@ -46,6 +46,7 @@ export const GridCanvas: React.FC = () => {
   const didRenderHistoricalCells = useRef(false)
   const wheelTimeoutRef = useRef<NodeJS.Timeout>()
   const touchTimeoutRef = useRef<NodeJS.Timeout>()
+  const animationFrameId = useRef<number>()
   const cellSize = useMemo(() => {
     if (canvasSize.width === 0 || grid.width === 0 || grid.height === 0) {
       return 0
@@ -584,9 +585,16 @@ export const GridCanvas: React.FC = () => {
       drawAnts()
       prevCanvasSize.current = canvasSize
       prevCellSize.current = cellSize
+      animationFrameId.current = requestAnimationFrame(draw)
     }
 
-    requestAnimationFrame(draw)
+    animationFrameId.current = requestAnimationFrame(draw)
+
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current)
+      }
+    }
   }, [drawCells, drawAnts, canvasSize, cellSize])
 
   useEffect(() => {
