@@ -11,7 +11,6 @@ export const WebSocketManager: React.FC = () => {
   const { toast } = useToast()
 
   const handleMessage = useCallback((message: IncomingMessage) => {
-    // console.log('WS Received:', JSON.stringify(message, null, 2))
     switch (message.type) {
       case 'PLAYER_JOIN': {
         const { playerId, color } = message.payload
