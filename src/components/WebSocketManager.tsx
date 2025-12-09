@@ -11,52 +11,45 @@ export const WebSocketManager: React.FC = () => {
   const { toast } = useToast()
 
   const handleMessage = useCallback((message: IncomingMessage) => {
+    console.log('WS Received:', JSON.stringify(message, null, 2))
     switch (message.type) {
-      case 'WELCOME': {
-        const { player, state } = message.payload
-        gameActions.setCurrentPlayer({ id: player.id, color: player.color, antId: null })
-        gameActions.setInitialState({
-          players: state.players,
-          ants: state.ants,
-          grid: {
-            width: state.grid.width,
-            height: state.grid.height,
-            cells: {}
-          },
-        })
-        break
-      }
-
-      case 'PLAYER_JOINED': {
+      case 'PLAYER_JOIN': {
         const { playerId, color } = message.payload
         gameActions.addPlayer({ id: playerId, color, antId: null })
+
+        // Strategy: If we don't have a current player set, assume the first JOIN message is us.
+        // This relies on the server sending the broadcast to the new client immediately.
+        // There is no explicit WELCOME message in the provided API spec.
+        if (!useGameStore.getState().currentPlayer) {
+          gameActions.setCurrentPlayer({ id: playerId, color, antId: null })
+        }
         break
       }
 
-      case 'PLAYER_LEFT': {
+      case 'PLAYER_LEAVE': {
         const { playerId, cells } = message.payload
         gameActions.removePlayer(playerId, cells)
         break
       }
 
-      case 'ANT_PLACED': {
-        const { ant, cells, playerId } = message.payload
-        gameActions.updateAntsList(playerId, ant, cells)
+      case 'PLACE_ANT': {
+        // Payload: { cells, ants }
+        gameActions.updateGameState(message.payload)
         uiActions.setIsPlacingAnt(false)
         break
       }
 
-      case 'GAME_TICK_UPDATE':
+      case 'GAME_STATE_SNAPSHOT':
         gameActions.updateGameState(message.payload)
         break
 
-      case 'RULES_CHANGED': {
+      case 'RULE_CHANGE': {
         const { playerId, rules } = message.payload
         gameActions.handleRuleChangeResponse(playerId, rules)
         break
       }
 
-      case 'TILE_FLIPPED': {
+      case 'TILE_FLIP': {
         const { cells } = message.payload
         gameActions.insertNewCells(cells)
         break
@@ -70,28 +63,8 @@ export const WebSocketManager: React.FC = () => {
         })
         break
 
-      case 'GRID_CHUNK': {
-        const { cells } = message.payload
-        gameActions.mergeGridCells(cells)
-        break
-      }
-
-      case 'GAME_CONFIG_UPDATED': {
-        const { gridSize, tickInterval } = message.payload
-        gameActions.updateGameConfig({
-          gridSize,
-          tickInterval
-        })
-        uiActions.setGameControlUpdateLoading(false)
-        toast({
-          title: 'Game Config Updated',
-          description: `Grid: ${gridSize}x${gridSize}, Tick: ${tickInterval}ms`,
-          variant: 'default'
-        })
-        break
-      }
-
       default:
+        console.warn('Unhandled message type:', message.type)
         break
     }
   }, [gameActions, uiActions, toast])

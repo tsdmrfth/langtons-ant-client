@@ -36,20 +36,21 @@ export const validateRules = (rules: Rule[]): void => {
     if (!Array.isArray(rules) || rules.length === 0) {
         throw createValidationError('Rules must be a non-empty array', 'rules', rules)
     }
-    
+
     rules.forEach((rule, index) => {
-        if (!rule.cellColor || !rule.turnDirection) {
+        if (!rule.currentColor || !rule.newColor || !rule.turnDirection) {
             throw createValidationError(`Rule at index ${index} missing required fields`, 'rules', rule)
         }
-        
-        validateColor(rule.cellColor)
-        
+
+        validateColor(rule.currentColor)
+        validateColor(rule.newColor)
+
         if (!['LEFT', 'RIGHT'].includes(rule.turnDirection)) {
             throw createValidationError(`Invalid turn direction at index ${index}`, 'rules', rule)
         }
     })
 
-    const ruleColors = new Set(rules.map(rule => rule.cellColor))
+    const ruleColors = new Set(rules.map(rule => rule.currentColor))
 
     if (ruleColors.size !== rules.length) {
         throw createValidationError('Rules cannot have duplicate cell colors', 'rules', rules)

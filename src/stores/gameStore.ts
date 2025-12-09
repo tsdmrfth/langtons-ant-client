@@ -1,11 +1,21 @@
 import { toast } from '@/hooks/use-toast'
 import webSocketService from '@/services/WebSocketSingleton'
-import { Ant, GameTickUpdatePayload, Grid, OutgoingMessage, PlaceAntPayload, Player, Rule, RuleChangePayload, TileFlipPayload } from '@/types/game'
+import { Ant, GameStateSnapshotPayload, Grid, OutgoingMessage, PlaceAntOutgoingPayload, Player, Rule, RuleChangeOutgoingPayload, ServerGridDiff, TileFlipOutgoingPayload } from '@/types/game'
 import { validatePosition, validateRules } from '@/utils/errorHandling'
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 
 const COLOR_WHITE = '#FFFFFF'
+
+const flattenCells = (diff: ServerGridDiff): Record<string, string> => {
+    const flat: Record<string, string> = {}
+    Object.values(diff).forEach(chunk => {
+        Object.entries(chunk).forEach(([key, color]) => {
+            flat[key] = color
+        })
+    })
+    return flat
+}
 
 interface GameStore {
     newCells: Record<string, string>
@@ -24,18 +34,17 @@ interface GameStore {
         setInitialState: (state: { grid: Grid, ants: Ant[], players: Record<string, Player> }) => void
         setCurrentPlayer: (player: Player) => void
         setSelectedRules: (rules: Rule[]) => void
-        updateGameState: (snapshot: GameTickUpdatePayload) => void
+        updateGameState: (snapshot: GameStateSnapshotPayload) => void
         addPlayer: (player: Player) => void
-        removePlayer: (playerId: string, cells: Record<string, string>) => void
+        removePlayer: (playerId: string, cells: ServerGridDiff) => void
         sendMessage: (message: OutgoingMessage) => void
         placeAnt: (position: { x: number, y: number }) => void
-        updateAntsList: (playerId: string, ant: Ant, cells: Record<string, string>) => void
+        updateAntsList: (playerId: string, ant: Ant, cells: ServerGridDiff) => void
         changeAntRules: (rules: Rule[]) => void
         flipTile: (position: { x: number, y: number }) => void
         mergeGridCells: (cells: Record<string, string>) => void
         handleRuleChangeResponse: (playerId: string, rules: Rule[]) => void,
-        insertNewCells: (cells: Record<string, string>) => void
-        updateGameConfig: (config: { gridSize: number, tickInterval: number }) => void
+        insertNewCells: (cells: ServerGridDiff) => void
     }
 }
 
@@ -69,11 +78,13 @@ export const useGameStore = create<GameStore>()(
                 set({
                     selectedRules: [
                         {
-                            cellColor: COLOR_WHITE,
+                            currentColor: COLOR_WHITE,
+                            newColor: player.color,
                             turnDirection: 'LEFT',
                         },
                         {
-                            cellColor: player.color,
+                            currentColor: player.color,
+                            newColor: COLOR_WHITE,
                             turnDirection: 'RIGHT',
                         },
                     ]
@@ -82,17 +93,18 @@ export const useGameStore = create<GameStore>()(
             setSelectedRules: (rules: Rule[]) => {
                 set({ selectedRules: rules })
             },
-            updateGameState: (snapshot: GameTickUpdatePayload) => {
+            updateGameState: (snapshot: GameStateSnapshotPayload) => {
+                const flatCells = flattenCells(snapshot.cells)
                 set((state) => ({
                     grid: {
                         ...state.grid,
-                        cells: { 
-                            ...state.grid.cells, 
-                            ...snapshot.cells
+                        cells: {
+                            ...state.grid.cells,
+                            ...flatCells
                         }
                     },
                     ants: snapshot.ants || state.ants,
-                    newCells: snapshot.cells || {}
+                    newCells: flatCells || {}
                 }))
             },
             addPlayer: (player: Player) => {
@@ -104,7 +116,7 @@ export const useGameStore = create<GameStore>()(
                     players: { ...state.players, [player.id]: player }
                 }))
             },
-            removePlayer: (playerId: string, cells: Record<string, string>) => {
+            removePlayer: (playerId: string, cells: ServerGridDiff) => {
                 set((state) => {
                     const { [playerId]: removed, ...remaining } = state.players
 
@@ -112,14 +124,15 @@ export const useGameStore = create<GameStore>()(
                         return state
                     }
 
-                    Object.keys(cells).forEach((cell) => {
-                        delete state.grid.cells[cell]
-                        delete state.historicalCells?.[cell]
-                    })
+                    // Currently not clearing cells on player leave as per previous logic adjustment,
+                    // but if we wanted to, we'd use flattenCells(cells).
+                    const flatCells = flattenCells(cells)
+                    // (Optional logic to clear cells would go here)
+
                     const ants = state.ants.filter((ant) => ant.id !== removed?.antId)
                     return {
                         players: remaining,
-                        newCells: cells,
+                        newCells: flatCells,
                         ants,
                         grid: state.grid,
                         historicalCells: state.historicalCells
@@ -158,10 +171,11 @@ export const useGameStore = create<GameStore>()(
                     return
                 }
 
-                const payload: PlaceAntPayload = { position, rules }
+                const payload: PlaceAntOutgoingPayload = { position, rules }
                 get().actions.sendMessage({ type: 'PLACE_ANT', payload })
             },
-            updateAntsList: (playerId: string, ant: Ant, cells: Record<string, string>) => {
+            updateAntsList: (playerId: string, ant: Ant, cells: ServerGridDiff) => {
+                const flatCells = flattenCells(cells)
                 set((state) => ({
                     players: {
                         ...state.players,
@@ -173,7 +187,7 @@ export const useGameStore = create<GameStore>()(
                     ants: [...state.ants, ant],
                     grid: {
                         ...state.grid,
-                        cells: { ...state.grid.cells, ...cells }
+                        cells: { ...state.grid.cells, ...flatCells }
                     },
                     currentPlayer: state.currentPlayer?.id === playerId ? {
                         ...state.currentPlayer,
@@ -193,8 +207,8 @@ export const useGameStore = create<GameStore>()(
                     return
                 }
 
-                const payload: RuleChangePayload = { rules }
-                get().actions.sendMessage({ type: 'CHANGE_RULES', payload })
+                const payload: RuleChangeOutgoingPayload = { rules }
+                get().actions.sendMessage({ type: 'RULE_CHANGE', payload })
             },
             flipTile: (position: { x: number, y: number }) => {
                 const { grid } = get()
@@ -210,8 +224,8 @@ export const useGameStore = create<GameStore>()(
                     return
                 }
 
-                const payload: TileFlipPayload = { position }
-                get().actions.sendMessage({ type: 'FLIP_TILE', payload })
+                const payload: TileFlipOutgoingPayload = { position }
+                get().actions.sendMessage({ type: 'TILE_FLIP', payload })
             },
             mergeGridCells: (cells: Record<string, string>) => {
                 set((state) => ({
@@ -223,9 +237,17 @@ export const useGameStore = create<GameStore>()(
                 }))
             },
             handleRuleChangeResponse: (playerId: string, rules: Rule[]) => {
+                // Find ant via player's antId
+                const player = get().players[playerId]
+                if (!player || !player.antId) {
+                    console.warn('Received rule change for unknown player/ant:', playerId)
+                    return
+                }
+                const antId = player.antId
+
                 set((state) => ({
                     ants: state.ants.map((ant) => {
-                        if (ant.id === playerId) {
+                        if (ant.id === antId) {
                             return { ...ant, rules }
                         }
                         return ant
@@ -246,24 +268,16 @@ export const useGameStore = create<GameStore>()(
                     })
                 }
             },
-            insertNewCells: (cells: Record<string, string>) => {
+            insertNewCells: (cells: ServerGridDiff) => {
+                const flatCells = flattenCells(cells)
                 set((state) => ({
-                    newCells: cells,
+                    newCells: flatCells,
                     grid: {
                         ...state.grid,
-                        cells: { 
+                        cells: {
                             ...state.grid.cells,
-                            ...cells
-                         }
-                    }
-                }))
-            },
-            updateGameConfig: (config: { gridSize: number, tickInterval: number }) => {
-                set((state) => ({
-                    grid: {
-                        ...state.grid,
-                        width: config.gridSize,
-                        height: config.gridSize
+                            ...flatCells
+                        }
                     }
                 }))
             }

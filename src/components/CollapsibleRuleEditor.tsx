@@ -55,7 +55,7 @@ export const CollapsibleRuleEditor: React.FC = () => {
                       <label className="block text-xs text-gray-400 mb-1">
                         Cell Color
                       </label>
-                      <div className="w-8 h-8 rounded border border-gray-600" style={{ backgroundColor: rule.cellColor }}></div>
+                      <div className="w-8 h-8 rounded border border-gray-600" style={{ backgroundColor: rule.currentColor }}></div>
                     </div>
 
                     <div>
